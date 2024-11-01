@@ -5,6 +5,7 @@ import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 // import { validate } from "uuid";
 import jwt from 'jsonwebtoken'
+import { Subscription } from "../models/subscriptions.model.js";
 
 const registerUser = asyncHandler(async (req, res) => {
      console.log(req.files);
@@ -299,6 +300,73 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
 })
 
 
+const getUserChannelProfile = asyncHandler(async (req, res) => {
+     const { username } = req.params;
+     if (!username?.trim()) {
+          throw new ApiError(400, 'Username is missing ');
+     }
+     // getting channel deitals 
+     const channel = await User.aggregate([
+          {
+               $match: {
+                    username: username?.toLowerCase()
+               }
+          },
+          {
+               $lookup: {
+                    from: "subscriptions",
+                    localField: "_id",
+                    foreignField: "channel",
+                    as: 'subscribers'
+               }
+          },
+          {
+               $lookup: {
+                    from: "subscriptions",
+                    localField: "_id",
+                    foreignField: "subscriber",
+                    as: 'subcribedTo'
+               }
+          },
+          {
+               $addFields: {
+                    subscribersCount: {
+                         $size: "$subscribers"
+                    },
+                    channelsSubcribedToCount: {
+                         $size: "$subcribedTo"
+                    },
+                    isSubscribed: {
+                         $cond: {
+                              if: { $in: [req.user?._id, "$subscribers.subscriber"] },
+                              then: true,
+                              else: false
+                         }
+                    },
+               }
+          },
+          {
+               $project: {
+                    fullname: 1,
+                    username: 1,
+                    subscribersCount: 1,
+                    channelsSubcribedToCount: 1,
+                    isSubscribed: 1,
+                    avatar: 1,
+                    coverImage: 1,
+                    email: 1,
+               }
+          }
+     ])
+
+     if (!channel?.length) {
+          throw new ApiError(404, 'Channel not found')
+     }
+     return res
+          .status(200)
+          .json(new ApiResponse(200, channel[0], 'User channel fetched  successfully'))
+})
+
 
 
 export {
@@ -310,5 +378,6 @@ export {
      getCurrentUser,
      updateAccountDetail,
      updateUserCoverImage,
-     updateUserAvatar
+     updateUserAvatar,
+     getUserChannelProfile
 };
